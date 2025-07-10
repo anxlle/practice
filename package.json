@@ -1,0 +1,16 @@
+{
+  "name": "cltml",
+  "version": "1.0.0",
+  "description": "Client Mailing List",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js"
+  },
+  "author": "Grishaev Daniil",
+  "license": "ISC",
+  "dependencies": {
+    "mysql2": "^3.14.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemon": "^3.1.10"
+  }
+}
