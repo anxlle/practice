@@ -25,22 +25,47 @@ bot.onText(/\/start/i, async (msg) => {
 });
 
 const finduserhandle = async (msg) => {
-	const id = await bot.sendMessage(msg.chat.id, "Скажите, пожалуйста, ваш ID", {
+	const id = await bot.sendMessage(msg.chat.id, "Напишите, пожалуйста, ваш ID", {
 		reply_markup: {
 			force_reply: true,
 		},
 	});
 	bot.onReplyToMessage(msg.chat.id, id.message_id, async (idMsg) => {
 		const id = idMsg.text;
-		pool.query("SELECT * FROM users WHERE id=?", [id], function (err, data) {
+		pool.query("SELECT * FROM users WHERE id=?", [id], async (err, data) => {
 			if (err) return bot.sendMessage(msg.chat.id, "Возникла ошибка во время поиска. Пожалуйста, проверьте правильность ввода данных.");
 			if (data.length === 0) return bot.sendMessage(msg.chat.id, "Такого пользователя не существует. Желаете ли зарегистрироваться или попытаться еще раз?", {
 				reply_markup: {
 					keyboard: [ ["Зарегистрироваться"], ["Попытаться еще раз"] ],
+					one_time_keyboard: true,
 				},
 			});
-			bot.sendMessage(msg.chat.id, "Здравствуйте!");
+			bot.sendMessage(msg.chat.id, "Пользователь обнаружен.");
+			
+			const userRecord = data[0];
+			
+			const pswrdenter = await bot.sendMessage(msg.chat.id, "Введите пароль.", {
+				reply_markup: {
+					force_reply: true,
+				},
+			});
+			bot.onReplyToMessage(msg.chat.id, pswrdenter.message_id, async (pswrdMsg) => {
+				const pswrd = pswrdMsg.text;
+				const hashedpswrd = userRecord.password;
+				
+				console.log(pswrd);
+				console.log(hashedpswrd);
+				bcrypt.compare(pswrd, hashedpswrd, function (err, res) {
+					if (err) {
+						console.error(err);
+						return bot.sendMessage(msg.chat.id, "Возникла ошибка. Попробуйте позже.");
+					};
+					if (!res) return bot.sendMessage(msg.chat.id, "Неверный пароль.");
+					bot.sendMessage(msg.chat.id, `Добро пожаловать в систему, ${userRecord.name[0]}. ${userRecord.patronymic[0]}. ${userRecord.surname}.`);
+				});
+			});
 		});
+		
 	});
 };
 
