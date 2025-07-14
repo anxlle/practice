@@ -1,3 +1,6 @@
+const bcrypt = require('bcrypt');
+const saltrate = 10;
+
 const tgbot = require('node-telegram-bot-api');
 const mysql = require('mysql2');
 
@@ -50,8 +53,8 @@ bot.onText(/\Попытаться еще раз/i, (msg) => {
 });
 
 bot.onText(/\Зарегистрироваться/i, async (msg) => {
-	const reg = await bot.sendMessage(msg.chat.id, "\nУкажите, пожалуйста, ваше ФИО, дату рождения \\(ДД\\.ММ\\.ГГГГ\\) и пол \\(М/Ж\\)\\."
-	+ "\nНапример, `Иванов Иван Иванович 01.01.1970 М`", {
+	const reg = await bot.sendMessage(msg.chat.id, "\nУкажите, пожалуйста, ваше ФИО, дату рождения \\(ДД\\.ММ\\.ГГГГ\\) и пол \\(М/Ж\\) и пароль\\."
+	+ "\nНапример, `Иванов Иван Иванович 01.01.1970 М coolpassword`", {
 		reply_markup: {
 			force_reply: true,
 		},
@@ -60,16 +63,22 @@ bot.onText(/\Зарегистрироваться/i, async (msg) => {
 	bot.onReplyToMessage(msg.chat.id, reg.message_id, async (nameMsg) => {
 		const lines = nameMsg.text.split(' ');
 		const formattedtext = lines.join('\n');
-		try {
-			const array = formattedtext.split('\n').map(String);
-			var surname = array[0], name = array[1], patronymic = array[2], dob = array[3].split('.').reverse().join('-'), sex = array[4];
-			pool.query("INSERT INTO users(`surname`, `name`, `patronymic`, `dob`, `sex`) VALUES (?, ?, ?, ?, ?)", [surname, name, patronymic, dob, sex], function (err, data) {
-				if (err) return bot.sendMessage(msg.chat.id, "Возникла ошибка при регистрации. Проверьте правильность ввода данных.");
-				bot.sendMessage(msg.chat.id, "Регистрация завершена!");
+		const array = formattedtext.split('\n').map(String);
+		const surname = array[0], name = array[1], patronymic = array[2], dob = array[3].split('.').reverse().join('-'), sex = array[4], pswrd = array[5];
+		array.forEach((el) => {
+			console.log(el);
+		});
+		bcrypt.hash(pswrd, saltrate, function (err, hashedpswrd) {
+			if (err) return console.log("Error hashing password: ", err);
+			console.log(hashedpswrd);
+			pool.query("INSERT INTO users(`surname`, `name`, `patronymic`, `dob`, `sex`, `password`) VALUES (?, ?, ?, ?, ?, ?)", [surname, name, patronymic, dob, sex, hashedpswrd], function (err, data) {
+				if (err) {
+					console.log(err);
+					return bot.sendMessage(msg.chat.id, "Возникла ошибка при регистрации. Проверьте правильность ввода данных, попробуйте позже или обратитесь в тех. поддержку если ошибка остается.");
+				};
+				bot.sendMessage(msg.chat.id, `Регистрация прошла успешно! Добро пожаловать в систему, ${name[0]}. ${patronymic[0]}. ${surname}.`);
 			});
-		} catch (err) {
-			console.log("Parsing error");
-		}
+		});
 	});
 });
 
