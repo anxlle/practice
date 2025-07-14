@@ -9,6 +9,7 @@
   "author": "Grishaev Daniil",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.0",
     "mysql2": "^3.14.1",
     "node-telegram-bot-api": "^0.66.0",
     "nodemon": "^3.1.10"
