@@ -1,7 +1,6 @@
 const bcrypt = require('bcrypt');
 const saltrate = 10;
 
-
 const tgbot = require('node-telegram-bot-api');
 const mysql = require('mysql2');
 
@@ -18,13 +17,19 @@ const pool = mysql.createPool({
 const { promisify } = require('util');
 const queryAsync = promisify(pool.query).bind(pool);
 
-const logged_in_users = {};
-const admins = [1292731256];
+let admins = [];
+
+async function loadAdmins() {
+	const res = await queryAsync("SELECT chatId FROM admins");
+	admins = res.map(row => row.chatId);
+};
+
+loadAdmins();
 
 var keyboards = {
 	main_menu: {
 		reply_markup: {
-			keyboard: [ ["Создать обращение"], ["Список обращений"], ["Выйти из системы"] ]
+			keyboard: [ ["Создать обращение", "Список обращений"], ["Товары и услуги"], ["Информация о боте", "Выйти из системы"] ]
 		}
 	},
 	retry_menu: {
@@ -39,31 +44,24 @@ var keyboards = {
 	},
 };
 
-/*bot.onText(/\/start/i, async (msg) => {
-	const rows = await queryAsync("SELECT * FROM users WHERE chatId=?", [msg.chat.id]);
-	if (rows.length === 0) return bot.sendMessage(msg.chat.id, "Здравствуйте! Вас приветствует бот Клиентская рассылка. Вы не зарегистрированы. Пожалуйста, выберите нужный пункт меню.",
-	keyboards.reg_menu);
-	const userData = rows[0];
-	logged_in_users[msg.chat.id] = userData.id;
-	if (userData.isOnline === 0) return bot.sendMessage(msg.chat.id, `Здравствуйте, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}! Вы зарегистрированы, но не вошли в систему.`,
-	keyboards.login_menu);
-	bot.sendMessage(msg.chat.id, `Здравствуйте, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}! Выберите нужный пункт меню.`,
-	keyboards.main_menu);
-});*/
-
 bot.onText(/\/start/i, async (msg) => {
 	const rows = await queryAsync("SELECT * FROM users WHERE chatId=?", [msg.chat.id]);
 	if (rows.length === 0) return bot.sendMessage(msg.chat.id, "Здравствуйте! Вас приветствует бот Клиентская рассылка. Пожалуйста, выберите нужный пункт меню.",
 	keyboards.start_menu);
 	const userData = rows[0];
-	logged_in_users[msg.chat.id] = userData.id;
 	if (userData.isOnline === 0) return bot.sendMessage(msg.chat.id, `Здравствуйте, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}! Вы зарегистрированы, но не вошли в систему.`,
 	keyboards.start_menu);
+	const res = await queryAsync("SELECT message FROM pending_message WHERE chatId=?", [msg.chat.id]);
+	const pendmsg = res;
+	if (pendmsg.length > 0) {
+		for (const msgRow of pendmsg) await bot.sendMessage(msg.chat.id, `РАССЫЛКА\n\n${msgRow.message}`);
+		await queryAsync("DELETE FROM pending_message WHERE chatId=?", [msg.chat.id]);
+	};
 	bot.sendMessage(msg.chat.id, `Здравствуйте, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}! Выберите нужный пункт меню.`,
 	keyboards.main_menu);
 });
 
-const finduserhandle = async (msg) => {
+const loginhandler = async (msg) => {
 	const rows = await queryAsync("SELECT * FROM users WHERE chatId=?", [msg.chat.id]);
 	const userData = rows[0];
 	if (rows.length > 0 && userData.isOnline === 0) {		
@@ -76,17 +74,22 @@ const finduserhandle = async (msg) => {
 			const pswrd = pswrdMsg.text;
 			const hashedpswrd = userData.password;
 			
-			bcrypt.compare(pswrd, hashedpswrd, function (err, res) {
+			bcrypt.compare(pswrd, hashedpswrd, async function (err, res) {
 				if (err) {
 					bot.sendMessage(admins[0], "User " + userData.id + " encountered an issue during login.\nMsg chat id: "
 					+ msg.chat.id + "\nErr msg: " + err);
 					return bot.sendMessage(msg.chat.id, "Возникла ошибка. Попробуйте позже.");
 				};
 				if (!res) return bot.sendMessage(msg.chat.id, "Неверный пароль.");
-				logged_in_users[msg.chat.id] = userData.id;
 				queryAsync("UPDATE users SET isOnline=1 WHERE id=?", [userData.id]);
 				bot.sendMessage(msg.chat.id, `Добро пожаловать в систему, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}.`,
 				keyboards.main_menu);
+				const msgres = await queryAsync("SELECT message FROM pending_message WHERE chatId=?", [msg.chat.id]);
+				const pendmsg = msgres;
+				if (pendmsg.length > 0) {
+					for (const msgRow of pendmsg) await bot.sendMessage(msg.chat.id, `РАССЫЛКА\n\n${msgRow.message}`);
+					await queryAsync("DELETE FROM pending_message WHERE chatId=?", [msg.chat.id]);
+				};
 			});
 		});
 	} else {
@@ -115,17 +118,22 @@ const finduserhandle = async (msg) => {
 					const pswrd = pswrdMsg.text;
 					const hashedpswrd = userData.password;
 					
-					bcrypt.compare(pswrd, hashedpswrd, function (err, res) {
+					bcrypt.compare(pswrd, hashedpswrd, async function (err, res) {
 						if (err) {
 							bot.sendMessage(admins[0], "User " + userData.id + " encountered an issue during login.\nMsg chat id: "
 							+ msg.chat.id + "\nErr msg: " + err);
 							return bot.sendMessage(msg.chat.id, "Возникла ошибка. Попробуйте позже.");
 						};
 						if (!res) return bot.sendMessage(msg.chat.id, "Неверный пароль.");
-						logged_in_users[msg.chat.id] = userData.id;
 						pool.query("UPDATE users SET chatId=?, isOnline=1 WHERE id=?", [msg.chat.id, userData.id]);
 						bot.sendMessage(msg.chat.id, `Добро пожаловать в систему, ${userData.name[0]}. ${userData.patronymic[0]}. ${userData.surname}.`,
 						keyboards.main_menu);
+						const msgres = await queryAsync("SELECT message FROM pending_message WHERE chatId=?", [msg.chat.id]);
+						const pendmsg = msgres;
+						if (pendmsg.length > 0) {
+							for (const msgRow of pendmsg) await bot.sendMessage(msg.chat.id, `РАССЫЛКА\n\n${msgRow.message}`);
+							await queryAsync("DELETE FROM pending_message WHERE chatId=?", [msg.chat.id]);
+						};
 					});
 				});
 			});
@@ -133,8 +141,8 @@ const finduserhandle = async (msg) => {
 	};
 };
 
-bot.onText(/\Войти/i, (msg) => finduserhandle(msg));
-bot.onText(/\Попытаться еще раз/i, (msg) => finduserhandle(msg));
+bot.onText(/\Войти/i, (msg) => loginhandler(msg));
+bot.onText(/\Попытаться еще раз/i, (msg) => loginhandler(msg));
 
 bot.onText(/\Зарегистрироваться/i, async (msg) => {
 	const reg = await bot.sendMessage(msg.chat.id, "\nУкажите, пожалуйста, ваше ФИО, дату рождения \\(ДД\\.ММ\\.ГГГГ\\) и пол \\(М/Ж\\) и пароль\\."
@@ -148,10 +156,11 @@ bot.onText(/\Зарегистрироваться/i, async (msg) => {
 		const lines = nameMsg.text.split(' ');
 		const formattedtext = lines.join('\n');
 		const array = formattedtext.split('\n').map(String);
+		//if (array.length !== 6) return bot.sendMessage("Возникла ошибка при регистрации. Данных недостаточно или слишком много. Проверьте правильность ввода данных.");
 		const surname = array[0], name = array[1], patronymic = array[2],
 		dob = array[3].split('.').reverse().join('-'),
 		sex = array[4], pswrd = array[5];
-		
+					
 		bcrypt.hash(pswrd, saltrate, function (err, hashedpswrd) {
 			if (err) return console.log("Error hashing password: ", err);
 			pool.query("INSERT INTO users(`surname`, `name`, `patronymic`, `dob`, `sex`, `password`, `chatId`, `isOnline`) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
@@ -169,26 +178,45 @@ bot.onText(/\Зарегистрироваться/i, async (msg) => {
 });
 
 bot.onText(/\Создать обращение/i, (msg) => {
-	console.log("haha");
+	
 });
 
 bot.onText(/\Список обращений/i, (msg) => {
-	console.log("haha");
+	
+});
+
+bot.onText(/\Информация/i, (msg) => {
+	bot.sendMessage(msg.chat.id, "Клиентская рассылка - классический чат-бот для создания обращений и получения рассылки разного рода - от информации о различных товарах до уникальных предложений"
+	+ "\nРазработчик: @unjanl\n@clt_ml_bot, (C) 2025",
+	keyboards.main_menu);
 });
 
 bot.onText(/\Выйти из системы/i, async (msg) => {
 	await queryAsync("UPDATE users SET isOnline=0 WHERE chatId=?", [msg.chat.id]);
-	delete logged_in_users[msg.chat.id];
 	await bot.sendMessage(msg.chat.id, "Вы успешно вышли из системы.", keyboards.start_menu);
 });
 
 //admin
 
-bot.onText(/\broadcast (.+)/i, async (msg, match) => {
-	if (!admins.include(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Вы не являетесь администратором системы", keyboards.main_menu);
+bot.onText(/\/broadcast (.+)/i, async (msg, match) => {
+	if (!admins.includes(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Вы не являетесь администратором системы", keyboards.main_menu);
 	
-	const message = match[1];
-	console.log("haha");
+	const bcmsg = match[1];
+		
+	try {
+		const res = await queryAsync("SELECT chatId, isOnline FROM users");
+		const users = res;
+		for (const user of users) {
+			const userId = Number(user.chatId);
+			
+			if (user.isOnline === 1) await bot.sendMessage(userId, `РАССЫЛКА\n\n${bcmsg}`);
+			else await queryAsync("INSERT INTO pending_message (`chatId`, `message`) VALUES (?, ?)", [userId, bcmsg]);
+		};
+		await bot.sendMessage(msg.chat.id, "Рассылка отправлена всем.");
+	} catch (err) {
+		console.error("Error bcmsg\n", err);
+		await bot.sendMessage(msg.chat.id, "Произошла ошибка при рассылке.");
+	};
 });
 
 process.on('SIGINT', async () => {
