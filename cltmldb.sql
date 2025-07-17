@@ -1,29 +1,40 @@
 CREATE TABLE users (
-    chatId BIGINT PRIMARY KEY,
+	id INT AUTO_INCREMENT PRIMARY KEY,
+    chatId BIGINT NOT NULL,
     username VARCHAR(255),
-    registeredAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    registeredAt DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE broadcasts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     message TEXT NOT NULL,
     buttons JSON,
-    scheduledTime DATETIME,
-    status ENUM('pending', 'sent', 'cancelled') DEFAULT 'pending'
+	userList JSON NOT NULL, -- хранение id (не chatId)
+    scheduledAt DATETIME NOT NULL,
+	createdAt DATETIME NOT NULL,
+    status ENUM('pending', 'sent') DEFAULT 'pending' NOT NULL
 );
 
 CREATE TABLE events (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    chatId BIGINT,
-    broadcastId INT,
-    eventType ENUM('sent', 'clicked'),
-    eventTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+    userId INT NOT NULL,
+    broadcastId INT NOT NULL,
+    eventType ENUM('sent', 'clicked') NOT NULL,
+    eventTime DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	btnCallback VARCHAR(255),
-    FOREIGN KEY (chat_id) REFERENCES users(chat_id),
-    FOREIGN KEY (broadcast_id) REFERENCES broadcasts(id)
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (broadcastId) REFERENCES broadcasts(id) ON DELETE CASCADE
 );
 
-CREATE EVENT IF NOT EXISTS delete_old_events
+CREATE TABLE admins (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	chatId BIGINT NOT NULL,
+	username VARCHAR(255) NOT NULL
+);
+
+CREATE EVENT IF NOT EXISTS deleteOldEvents
 ON SCHEDULE EVERY 1 DAY
 DO
-DELETE FROM events WHERE event_time < NOW() - INTERVAL 1 YEAR;
+DELETE FROM events WHERE eventTime < NOW() - INTERVAL 1 YEAR;
+
+SET GLOBAL event_scheduler="ON"
