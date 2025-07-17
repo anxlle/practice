@@ -133,7 +133,6 @@ bot.onText(/\/createbroadcast(.*)/i, async (msg, match) => {
 	};
 });
 
-
 schedule.scheduleJob('* * * * *', async () => {
 	try {
 		const now = new Date();
